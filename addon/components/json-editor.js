@@ -1,17 +1,15 @@
 /* global JSONEditor */
-
 import Component from '@ember/component';
-
 import { run } from '@ember/runloop';
 import { merge } from '@ember/polyfills';
 import { isEmpty, isNone } from '@ember/utils';
+// eslint-disable-next-line ember/no-observers
 import { defineProperty, observer, computed } from '@ember/object';
 
 const possibleOptions = ['ace', 'ajv', 'escapeUnicode', 'history', 'modes', 'search', 'indentation', 'theme', 'disabled'];
 
 export default Component.extend({
   classNames: ['ember-cli-jsoneditor'],
-
   name: 'JSONEditor',
   mode: 'tree',
   history: true,
@@ -20,121 +18,156 @@ export default Component.extend({
   escapeUnicode: false,
   theme: 'ace/theme/jsoneditor',
   modes: null,
-
   disabled: false,
+  isTyping: false,
 
-  onChange() {},
-  onError() {},
-  onModeChange() {},
-  onEditable(e) { return e;},
+  /**
+   * Function to store JSON input value when changed
+   *
+   * @public
+   * @property onChange
+   * @type {Function}
+   */
+  onChange: null,
 
-  init() {
-    this._super(...arguments);
+  /**
+   *
+   * @public
+   * @property onError
+   * @type {Function}
+   */
+  onError: null,
+
+  /**
+   *
+   * @public
+   * @property onModeChange
+   * @type {Function}
+   */
+  onModeChange: function(newMode, oldMode) {
+    this.set('mode', newMode);
+  },
+
+  /**
+   *
+   * @public
+   * @property onEditable
+   * @type {Function}
+   */
+  onEditable(e) {
+    return e;
+  },
+
+  /**
+   *
+   * @public
+   * @property onBlur
+   * @type {Function}
+   */
+  onBlur() {
+    this.isTyping = false;
+  },
+
+  init(...args) {
+    this._super(...args);
     this.set('modes', ['tree', 'view', 'form', 'text', 'code']);
     defineProperty(this, 'options', computed(...possibleOptions, this.getOptions));
   },
 
-  didInsertElement() {
-    this._super(...arguments);
+  didInsertElement(...args) {
+    this._super(...args);
+    // eslint-disable-next-line no-underscore-dangle
     this._createEditorPid = run.scheduleOnce('afterRender', this, this.createEditor);
   },
 
-  destroy() {
-    this._super(...arguments);
-
-    const editor = this.get('editor');
-
-    if (!isNone(editor)) {
-      editor.destroy();
+  destroy(...args) {
+    this._super(...args);
+    if (!isNone(this.editor)) {
+      this.editor.destroy();
     }
-
+    // eslint-disable-next-line no-underscore-dangle
     run.cancel(this._createEditorPid);
   },
 
-  createEditor: observer('options', function() {
-    if (!this.notDestroyed()) {
+  // eslint-disable-next-line ember/no-observers
+  createEditor: observer('options', function () {
+    if (this.isDestroyed) {
       return;
     }
-
-    const element = this.get('element');
-    const editor = this.get('editor');
-
-    if (isNone(element)) {
+    if (isNone(this.element)) {
       return;
     }
-
-    if (!isNone(editor)) {
-      editor.destroy();
+    if (!isNone(this.editor)) {
+      this.editor.destroy();
     }
-
-    this.set('editor', new JSONEditor(element, this.get('options'), this.getJSON()));
+    this.set('editor', new JSONEditor(this.element, this.options, this.getJSON()));
   }),
 
-  modeChanged: observer('mode', function() {
-    if (this.notDestroyed()) {
-      this.get('editor').setMode(this.get('mode'));
-    }
-  }),
-
-  nameChanged: observer('name', function() {
-    if (this.notDestroyed()) {
-      this.get('editor').setName(this.get('name'));
+  // eslint-disable-next-line ember/no-observers
+  modeChanged: observer('mode', function () {
+    if (!this.isDestroyed) {
+      this.editor.setMode(this.mode);
     }
   }),
 
-  schemaChanged: observer('schema', function() {
-    if (this.notDestroyed()) {
-      this.get('editor').setSchema(this.get('schema'));
+  // eslint-disable-next-line ember/no-observers
+  nameChanged: observer('name', function () {
+    if (!this.isDestroyed) {
+      this.editor.setName(this.name);
     }
   }),
 
-  jsonChanged: observer('json', function() {
-    // Only update json if it was change programatically
-    if (!this._isTyping && this.notDestroyed()) {
-      this.get('editor').set(this.getJSON());
+  // eslint-disable-next-line ember/no-observers
+  schemaChanged: observer('schema', function () {
+    if (!this.isDestroyed) {
+      this.editor.setSchema(this.schema);
     }
+  }),
+
+  // eslint-disable-next-line ember/no-observers
+  jsonChanged: observer('json', function () {
+    this.setJSON();
   }),
 
   getOptions() {
     const options = this.getProperties(possibleOptions);
+    // eslint-disable-next-line ember/no-get
     merge(options, this.getProperties(['name', 'mode', 'schema']));
-
     if (options.disabled) {
       options.mode = 'view';
       options.modes = ['view'];
     }
-
     options.onChange = () => {
-      this._isTyping = true;
-      const editor = this.get('editor');
+      this.isTyping = true;
+      const { editor } = this;
       try {
-        this.get('onChange')(editor.get());
-      } catch(err) {
-        if(isEmpty(editor.getText())) {
-          this.get('onChange')({});
+        this.onChange(editor.get());
+      } catch (err) {
+        if (isEmpty(editor.getText())) {
+          this.onChange({});
         }
       }
-      this._isTyping = false;
     };
-
-    options.onError = this.get('onError');
-    options.onModeChange = this.get('onModeChange');
-    options.onEditable = this.get('onEditable');
-
+    options.onBlur = this.onBlur.bind(this);
+    options.onEditable = this.onEditable;
+    options.onError = this.onError;
+    options.onModeChange = this.onModeChange.bind(this);
     delete options.disabled;
-
     return options;
   },
 
   getJSON() {
-    let json = this.get('json');
-    if (typeof json === "string") {
+    const { json } = this;
+    if (typeof json === 'string') {
       return JSON.parse(json);
     }
     return json;
   },
 
-  notDestroyed() {
-    return !this.get('isDestroyed') && !this.get('isDestroyed');
-  }
+  setJSON() {
+    // Only update json if it was change programatically
+    if (!this.isTyping && !this.isDestroyed) {
+      this.editor.set(this.getJSON());
+    }
+  },
 });
